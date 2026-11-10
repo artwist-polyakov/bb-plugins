@@ -879,8 +879,7 @@ function LimitsOverlay() {
 
   return (
     <div
-      onDoubleClick={toggleMinimized}
-      title="Limits · double-click to minimize/restore"
+      title="Limits"
       className="pointer-events-none fixed right-3 bottom-4 z-[60] hidden transition-[right] duration-200 md:block"
       style={rightPx === null ? undefined : { right: `${rightPx}px` }}
     >
@@ -925,6 +924,36 @@ function LimitsOverlay() {
         />
       </div>
       )}
+      <button
+        type="button"
+        title={minimized ? "Expand limits pill" : "Minimize limits pill"}
+        aria-label={minimized ? "Expand limits pill" : "Minimize limits pill"}
+        onClick={(event) => {
+          event.stopPropagation();
+          toggleMinimized();
+        }}
+        className={`pointer-events-auto absolute -top-2.5 right-2 flex h-4 w-6 cursor-pointer items-center justify-center rounded-full border border-border/60 bg-background/80 text-muted-foreground shadow-sm backdrop-blur-md transition-colors hover:text-foreground [-webkit-app-region:no-drag] ${
+          dialogOpen ? "hidden" : ""
+        }`}
+      >
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          {minimized ? (
+            <path d="M6 10l6 6 6-6" />
+          ) : (
+            <path d="M6 14l6-6 6 6" />
+          )}
+        </svg>
+      </button>
       {/* One shared dialog for the whole pill — per-chip instances stack
          into layers that look like a broken close button. */}
       <LimitsDialog
