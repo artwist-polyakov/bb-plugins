@@ -722,6 +722,24 @@ function LimitsOverlay() {
   // context-circle/send cluster. Panes are found by bb's own marker.
   const [rightPx, setRightPx] = useState<number | null>(null);
 
+  // Free placement state lives above the measurement effect so the effect
+  // can depend on it.
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(() => {
+    try {
+      const raw = localStorage.getItem("limits:pillPos");
+      return raw === null
+        ? null
+        : (JSON.parse(raw) as { left: number; top: number });
+    } catch {
+      return null;
+    }
+  });
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const [repel, setRepel] = useState<{ left: number; top: number } | null>(
+    null,
+  );
+
   useEffect(() => {
     const PILL_WIDTH = 380;
     const PILL_HEIGHT = 48;
@@ -775,14 +793,63 @@ function LimitsOverlay() {
       });
     };
 
+    // Custom placement: the browser pane repels the pill off its area —
+    // shift left of the pane, or above it when there is no room. The user's
+    // stored spot is untouched; the pill returns there once the pane closes.
+    const measureRepel = () => {
+      if (dragRef.current !== null) {
+        setRepel(null);
+        return;
+      }
+      const element = containerRef.current;
+      if (element === null || pos === null) {
+        setRepel(null);
+        return;
+      }
+      const browserElement = document.querySelector("[data-app-browser]");
+      if (browserElement === null) {
+        setRepel(null);
+        return;
+      }
+      const width = element.offsetWidth;
+      const height = element.offsetHeight;
+      const base = {
+        left: pos.left,
+        right: pos.left + width,
+        top: pos.top,
+        bottom: pos.top + height,
+      };
+      const rect = browserElement.getBoundingClientRect();
+      const overlaps =
+        rect.left < base.right &&
+        rect.right > base.left &&
+        rect.top < base.bottom &&
+        rect.bottom > base.top;
+      if (!overlaps) {
+        setRepel(null);
+        return;
+      }
+      const left = rect.left - MARGIN - width;
+      if (left >= 8) {
+        setRepel({ left, top: pos.top });
+        return;
+      }
+      const top = rect.top - MARGIN - height;
+      setRepel(top >= 40 ? { left: pos.left, top } : null);
+    };
+
     measure();
-    const timer = setInterval(measure, 1000);
-    window.addEventListener("resize", measure);
+    measureRepel();
+    const timer = setInterval(() => {
+      measure();
+      measureRepel();
+    }, 1000);
+    window.addEventListener("resize", measureRepel);
     return () => {
       clearInterval(timer);
-      window.removeEventListener("resize", measure);
+      window.removeEventListener("resize", measureRepel);
     };
-  }, []);
+  }, [pos]);
 
   // The thread's current model — a local daemon read (no provider traffic),
   // re-checked periodically so in-thread provider/model switches show up.
@@ -872,17 +939,8 @@ function LimitsOverlay() {
 
   // Free placement: drag the plate anywhere; the spot is remembered per
   // window. Drop it back near the bottom-right corner to resume auto mode
-  // (which also steps aside from browser panes).
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(() => {
-    try {
-      const raw = localStorage.getItem("limits:pillPos");
-      return raw === null ? null : (JSON.parse(raw) as { left: number; top: number });
-    } catch {
-      return null;
-    }
-  });
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [dragging, setDragging] = useState(false);
+  // (which also steps aside from browser panes). Declarations live above,
+  // next to the measurement effect.
   const dragRef = useRef<{
     startX: number;
     startY: number;
@@ -969,11 +1027,13 @@ function LimitsOverlay() {
         dragging ? "" : "transition-all duration-200"
       } ${pos === null ? (minimized ? "right-3 bottom-14" : "right-3 bottom-4") : ""}`}
       style={
-        pos === null
-          ? rightPx === null
-            ? undefined
-            : { right: `${rightPx}px` }
-          : { left: `${pos.left}px`, top: `${pos.top}px` }
+        repel !== null
+          ? { left: `${repel.left}px`, top: `${repel.top}px` }
+          : pos === null
+            ? rightPx === null
+              ? undefined
+              : { right: `${rightPx}px` }
+            : { left: `${pos.left}px`, top: `${pos.top}px` }
       }
     >
       {minimized ? (
