@@ -854,15 +854,57 @@ function LimitsOverlay() {
   const primary = resolved ?? pinned ?? byScarcest[0];
   if (primary === undefined) return null;
 
+  // Double-click collapses the pill to a single dot (and back). Kept in the
+  // window's localStorage — no server round-trip for a purely visual pref.
+  const [minimized, setMinimized] = useState(
+    () => localStorage.getItem("limits:pillMinimized") === "1",
+  );
+  const toggleMinimized = () => {
+    setMinimized((previous) => {
+      localStorage.setItem("limits:pillMinimized", previous ? "0" : "1");
+      return !previous;
+    });
+  };
+  const primaryProvider =
+    data?.providers.find(
+      (entry) => entry.providerId === primary.providerId,
+    ) ?? null;
+  const primaryHealthy =
+    primaryProvider !== null &&
+    primaryProvider.status === "ok" &&
+    headline(primaryProvider) !== null;
+  const primaryLeft = primaryHealthy
+    ? remaining(headline(primaryProvider!)!)
+    : 0;
+
   return (
     <div
+      onDoubleClick={toggleMinimized}
+      title="Limits · double-click to minimize/restore"
       className="pointer-events-none fixed right-3 bottom-4 z-[60] hidden transition-[right] duration-200 md:block"
       style={rightPx === null ? undefined : { right: `${rightPx}px` }}
     >
-      {/* No hover expansion by design: hover does nothing, the refresh
-          button updates just this provider, and a click opens the popup
-          with everyone and Refresh all. Above split panes (z-60), but it
-          steps aside while its own dialog is open. */}
+      {minimized ? (
+        <div className="group/chip pointer-events-auto flex cursor-pointer items-center rounded-full border border-border/60 bg-background/75 p-1.5 shadow-sm backdrop-blur-md [-webkit-app-region:no-drag]"
+          role="img"
+          aria-label={
+            primaryProvider === null
+              ? "Limits"
+              : `${primary.label}: ${primaryHealthy ? `${primaryLeft.toFixed(0)}% left` : statusNote(primaryProvider)}`
+          }
+          onClick={() => setDialogOpen(true)}
+        >
+          <ProgressRing
+            left={primaryHealthy ? primaryLeft : 0}
+            size={18}
+            stroke={2.5}
+            ghost={!primaryHealthy}
+          />
+          {primaryProvider === null ? null : (
+            <HoverCard provider={primaryProvider} />
+          )}
+        </div>
+      ) : (
       <div
         className={`pointer-events-auto flex items-center rounded-full border border-border/60 bg-background/75 py-1.5 pr-3.5 pl-2.5 shadow-sm backdrop-blur-md transition-opacity [-webkit-app-region:no-drag] ${
           dialogOpen ? "pointer-events-none opacity-0" : "opacity-100"
@@ -882,6 +924,7 @@ function LimitsOverlay() {
           label={primary.label}
         />
       </div>
+      )}
       {/* One shared dialog for the whole pill — per-chip instances stack
          into layers that look like a broken close button. */}
       <LimitsDialog
