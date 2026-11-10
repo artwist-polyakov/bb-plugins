@@ -703,16 +703,6 @@ function LimitsOverlay() {
   const { threadId } = useBbContext();
   const sidebar = experimental_useSidebarThreads();
   const rpc = useRpc<Contract>();
-  const diag = useCallback(
-    (message: string) => {
-      void rpc.call("diag", { message }).catch(() => undefined);
-    },
-    [rpc],
-  );
-  useEffect(() => {
-    diag("mounted");
-    return () => diag("unmounted");
-  }, [diag]);
   const [threadModel, setThreadModel] = useState<{
     model: string | null;
   } | null>(null);
@@ -785,12 +775,7 @@ function LimitsOverlay() {
         return;
       }
       const next = w - pillRightEdge;
-      setRightPx((previous) => {
-        if (previous !== next) {
-          diag(`shift: browser=${Math.round(browserRect.left)}-${Math.round(browserRect.right)} chatRight=${Math.round(chat.right)} right=${next}`);
-        }
-        return next;
-      });
+      setRightPx((previous) => (previous === next ? previous : next));
     };
 
     // Custom placement: the browser pane repels the pill off its area —

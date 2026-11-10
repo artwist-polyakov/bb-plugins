@@ -87,10 +87,6 @@ export const rpcContract = defineRpcContract({
     input: z.object({ providerId: z.string() }).strict(),
     output: snapshotSchema,
   },
-  diag: {
-    input: z.object({ message: z.string() }).strict(),
-    output: z.null(),
-  },
   threadModel: {
     input: z.object({ threadId: z.string() }).strict(),
     output: z.object({
@@ -344,10 +340,6 @@ export default async function plugin(bb: BbPluginApi) {
   bb.rpc.register(rpcContract, {
     snapshot: () => cached ?? { providers: [], fetchedAt: null, error: null },
     refresh: () => refresh(),
-    diag: ({ message }) => {
-      bb.log.info(`[pill] ${message}`);
-      return null;
-    },
     async refreshProvider({ providerId }) {
       // Refresh ONE provider and merge it into the cached snapshot — the
       // inline pill button refreshes just the harness the chat runs on.
