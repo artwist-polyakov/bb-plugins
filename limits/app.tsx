@@ -699,9 +699,78 @@ function LimitsOverlay() {
   const { threadId } = useBbContext();
   const sidebar = experimental_useSidebarThreads();
   const rpc = useRpc<Contract>();
+  const diag = useCallback(
+    (message: string) => {
+      void rpc.call("diag", { message }).catch(() => undefined);
+    },
+    [rpc],
+  );
+  useEffect(() => {
+    diag("mounted");
+    return () => diag("unmounted");
+  }, [diag]);
   const [threadModel, setThreadModel] = useState<{
     model: string | null;
   } | null>(null);
+  // When a right split pane (browser, terminal, preview — sometimes a
+  // native OS layer no z-index can beat) covers the pill's corner, the pill
+  // moves to the chat pane's composer row, its right edge left of the
+  // context-circle/send cluster. Panes are found by bb's own marker.
+  const [rightPx, setRightPx] = useState<number | null>(null);
+
+  useEffect(() => {
+    const PILL_WIDTH = 380;
+    const PILL_HEIGHT = 48;
+    const MARGIN = 12;
+    const BOTTOM = 16;
+    const RIGHT_CLUSTER = 260;
+
+    const measure = () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const pill = {
+        left: w - MARGIN - PILL_WIDTH,
+        right: w - MARGIN,
+        top: h - BOTTOM - PILL_HEIGHT,
+        bottom: h - BOTTOM,
+      };
+      const panes = Array.from(
+        document.querySelectorAll("[data-split-pane-id]"),
+      ).map((element) => element.getBoundingClientRect());
+      if (panes.length < 2) {
+        setRightPx(null);
+        return;
+      }
+      const covered = panes.some(
+        (rect) =>
+          rect.left < pill.right &&
+          rect.right > pill.left &&
+          rect.top < pill.bottom &&
+          rect.bottom > pill.top,
+      );
+      if (!covered) {
+        setRightPx(null);
+        return;
+      }
+      // The chat pane (leftmost): park the pill on its composer row, left of
+      // the context-circle cluster near that composer's right edge.
+      const chat = panes.reduce((a, rect) => (rect.left < a.left ? rect : a));
+      const pillRightEdge = chat.right - RIGHT_CLUSTER;
+      if (pillRightEdge - chat.left - MARGIN < PILL_WIDTH) {
+        setRightPx(null);
+        return;
+      }
+      setRightPx(w - pillRightEdge);
+    };
+
+    measure();
+    const timer = setInterval(measure, 1000);
+    window.addEventListener("resize", measure);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
 
   // The thread's current model — a local daemon read (no provider traffic),
   // re-checked periodically so in-thread provider/model switches show up.
@@ -778,11 +847,19 @@ function LimitsOverlay() {
   if (primary === undefined) return null;
 
   return (
-    <div className="pointer-events-none fixed right-3 bottom-4 z-50 hidden md:block">
+    <div
+      className="pointer-events-none fixed right-3 bottom-4 z-[60] hidden transition-[right] duration-200 md:block"
+      style={rightPx === null ? undefined : { right: `${rightPx}px` }}
+    >
       {/* No hover expansion by design: hover does nothing, the refresh
           button updates just this provider, and a click opens the popup
-          with everyone and Refresh all. */}
-      <div className="pointer-events-auto flex items-center rounded-full border border-border/60 bg-background/75 py-1.5 pr-3.5 pl-2.5 shadow-sm backdrop-blur-md [-webkit-app-region:no-drag]">
+          with everyone and Refresh all. Above split panes (z-60), but it
+          steps aside while its own dialog is open. */}
+      <div
+        className={`pointer-events-auto flex items-center rounded-full border border-border/60 bg-background/75 py-1.5 pr-3.5 pl-2.5 shadow-sm backdrop-blur-md transition-opacity [-webkit-app-region:no-drag] ${
+          dialogOpen ? "pointer-events-none opacity-0" : "opacity-100"
+        }`}
+      >
         <ProviderChip
           providerId={primary.providerId}
           label={primary.label}
