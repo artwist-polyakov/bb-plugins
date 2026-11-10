@@ -1,5 +1,5 @@
 // bb-plugin-limits — thread-header rings showing remaining provider quota.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   definePluginApp,
   experimental_useSidebarThreads,
@@ -865,6 +865,80 @@ function LimitsOverlay() {
       return !previous;
     });
   };
+
+  // Free placement: drag the plate anywhere; the spot is remembered per
+  // window. Drop it back near the bottom-right corner to resume auto mode
+  // (which also steps aside from browser panes).
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(() => {
+    try {
+      const raw = localStorage.getItem("limits:pillPos");
+      return raw === null ? null : (JSON.parse(raw) as { left: number; top: number });
+    } catch {
+      return null;
+    }
+  });
+  const containerRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{
+    startX: number;
+    startY: number;
+    originLeft: number;
+    originTop: number;
+    moved: boolean;
+  } | null>(null);
+  const suppressClick = useRef(false);
+
+  const onDragStart = (event: React.PointerEvent) => {
+    if (dialogOpen) return;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (rect === undefined) return;
+    dragRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      originLeft: rect.left,
+      originTop: rect.top,
+      moved: false,
+    };
+  };
+  const onDragMove = (event: React.PointerEvent) => {
+    const drag = dragRef.current;
+    if (drag === null) return;
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    if (!drag.moved && Math.hypot(dx, dy) < 5) return;
+    drag.moved = true;
+    const width = containerRef.current?.offsetWidth ?? 380;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    setPos({
+      left: Math.min(Math.max(drag.originLeft + dx, 8), w - 60),
+      top: Math.min(Math.max(drag.originTop + dy, 40), h - 56),
+    });
+  };
+  const onDragEnd = () => {
+    const drag = dragRef.current;
+    dragRef.current = null;
+    if (drag === null || !drag.moved) return;
+    suppressClick.current = true;
+    requestAnimationFrame(() => {
+      suppressClick.current = false;
+    });
+    setPos((current) => {
+      if (current === null) return null;
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      // Dropped back onto the default corner → auto mode again.
+      if (current.left > w - 100 && current.top > h - 130) {
+        localStorage.removeItem("limits:pillPos");
+        return null;
+      }
+      localStorage.setItem("limits:pillPos", JSON.stringify(current));
+      return current;
+    });
+  };
+  const openDialog = () => {
+    if (!suppressClick.current) setDialogOpen(true);
+  };
+
   const primaryProvider =
     data?.providers.find(
       (entry) => entry.providerId === primary.providerId,
@@ -879,19 +953,32 @@ function LimitsOverlay() {
 
   return (
     <div
-      title="Limits"
-      className="pointer-events-none fixed right-3 bottom-4 z-[60] hidden transition-[right] duration-200 md:block"
-      style={rightPx === null ? undefined : { right: `${rightPx}px` }}
+      ref={containerRef}
+      title="Limits · drag to place, drop in the corner for auto"
+      className={`pointer-events-none fixed z-[60] hidden transition-all duration-200 md:block ${
+        pos === null ? (minimized ? "right-3 bottom-14" : "right-3 bottom-4") : ""
+      }`}
+      style={
+        pos === null
+          ? rightPx === null
+            ? undefined
+            : { right: `${rightPx}px` }
+          : { left: `${pos.left}px`, top: `${pos.top}px` }
+      }
     >
       {minimized ? (
-        <div className="group/chip pointer-events-auto flex cursor-pointer items-center rounded-full border border-border/60 bg-background/75 p-1.5 shadow-sm backdrop-blur-md [-webkit-app-region:no-drag]"
+        <div className="group/chip pointer-events-auto flex cursor-pointer touch-none select-none items-center rounded-full border border-border/60 bg-background/75 p-1.5 shadow-sm backdrop-blur-md [-webkit-app-region:no-drag]"
           role="img"
+          onPointerDown={onDragStart}
+          onPointerMove={onDragMove}
+          onPointerUp={onDragEnd}
+          onPointerCancel={onDragEnd}
           aria-label={
             primaryProvider === null
               ? "Limits"
               : `${primary.label}: ${primaryHealthy ? `${primaryLeft.toFixed(0)}% left` : statusNote(primaryProvider)}`
           }
-          onClick={() => setDialogOpen(true)}
+          onClick={openDialog}
         >
           <ProgressRing
             left={primaryHealthy ? primaryLeft : 0}
@@ -905,7 +992,11 @@ function LimitsOverlay() {
         </div>
       ) : (
       <div
-        className={`pointer-events-auto flex items-center rounded-full border border-border/60 bg-background/75 py-1.5 pr-3.5 pl-2.5 shadow-sm backdrop-blur-md transition-opacity [-webkit-app-region:no-drag] ${
+        onPointerDown={onDragStart}
+        onPointerMove={onDragMove}
+        onPointerUp={onDragEnd}
+        onPointerCancel={onDragEnd}
+        className={`pointer-events-auto flex cursor-grab touch-none select-none items-center rounded-full border border-border/60 bg-background/75 py-1.5 pr-3.5 pl-2.5 shadow-sm backdrop-blur-md transition-opacity [-webkit-app-region:no-drag] ${
           dialogOpen ? "pointer-events-none opacity-0" : "opacity-100"
         }`}
       >
@@ -915,7 +1006,7 @@ function LimitsOverlay() {
           setting={primary.setting}
           settingDefault={primary.default}
           data={data}
-          onOpen={() => setDialogOpen(true)}
+          onOpen={openDialog}
         />
         <RefreshLimitsButton
           rpc={rpc}
