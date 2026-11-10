@@ -737,30 +737,38 @@ function LimitsOverlay() {
       const panes = Array.from(
         document.querySelectorAll("[data-split-pane-id]"),
       ).map((element) => element.getBoundingClientRect());
-      if (panes.length < 2) {
+      // The browser pane (sometimes a native OS layer no z-index can beat)
+      // sits right of the single split pane; its marker tells us it's there.
+      const browserElement = document.querySelector("[data-app-browser]");
+      if (browserElement === null) {
         setRightPx(null);
         return;
       }
-      const covered = panes.some(
-        (rect) =>
-          rect.left < pill.right &&
-          rect.right > pill.left &&
-          rect.top < pill.bottom &&
-          rect.bottom > pill.top,
-      );
-      if (!covered) {
+      const browserRect = browserElement.getBoundingClientRect();
+      const overlaps =
+        browserRect.left < pill.right && browserRect.right > pill.left;
+      if (!overlaps) {
         setRightPx(null);
         return;
       }
-      // The chat pane (leftmost): park the pill on its composer row, left of
-      // the context-circle cluster near that composer's right edge.
-      const chat = panes.reduce((a, rect) => (rect.left < a.left ? rect : a));
+      // Park on the chat pane's composer row, left of the context-circle
+      // cluster near that composer's right edge.
+      const chat =
+        panes.length > 0
+          ? panes.reduce((a, rect) => (rect.left < a.left ? rect : a))
+          : browserRect;
       const pillRightEdge = chat.right - RIGHT_CLUSTER;
       if (pillRightEdge - chat.left - MARGIN < PILL_WIDTH) {
         setRightPx(null);
         return;
       }
-      setRightPx(w - pillRightEdge);
+      const next = w - pillRightEdge;
+      setRightPx((previous) => {
+        if (previous !== next) {
+          diag(`shift: browser=${Math.round(browserRect.left)}-${Math.round(browserRect.right)} chatRight=${Math.round(chat.right)} right=${next}`);
+        }
+        return next;
+      });
     };
 
     measure();
