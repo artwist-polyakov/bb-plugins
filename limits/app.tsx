@@ -723,7 +723,7 @@ function LimitsOverlay() {
     const PILL_HEIGHT = 48;
     const MARGIN = 12;
     const BOTTOM = 16;
-    const RIGHT_CLUSTER = 260;
+    const RIGHT_CLUSTER = 180;
 
     const measure = () => {
       const w = window.innerWidth;
