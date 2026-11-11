@@ -205,10 +205,15 @@ export default async function plugin(bb: BbPluginApi) {
   async function fetchLimits(
     providerId?: string,
   ): Promise<Record<string, RawProvider>> {
+    // A hung bb-side collector (seen: one call wedged for 10+ minutes) must
+    // never wedge the refresh button — bound every call.
+    const signal = AbortSignal.timeout(
+      providerId === undefined ? 60_000 : 30_000,
+    );
     return (await bb.sdk.system.usageLimits(
       providerId === undefined
-        ? { refresh: true }
-        : { providerId, refresh: true },
+        ? { refresh: true, signal }
+        : { providerId, refresh: true, signal },
     )) as Record<string, RawProvider>;
   }
 
