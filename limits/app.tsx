@@ -677,10 +677,12 @@ function RefreshLimitsButton({
   rpc,
   providerId,
   label,
+  onRefreshed,
 }: {
   rpc: PluginRpcClient<Contract>;
   providerId: string;
   label: string;
+  onRefreshed: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   return (
@@ -693,6 +695,7 @@ function RefreshLimitsButton({
         setBusy(true);
         rpc
           .call("refreshProvider", { providerId })
+          .then(() => onRefreshed())
           .catch(() => undefined)
           .finally(() => setBusy(false));
       }}
@@ -1087,7 +1090,7 @@ function LimitsOverlay() {
           }
           onClick={() => {
             dotPulse.pulse();
-            openDialog();
+            setTimeout(openDialog, 240);
           }}
         >
           <ProgressRing
@@ -1116,13 +1119,18 @@ function LimitsOverlay() {
           setting={primary.setting}
           settingDefault={primary.default}
           data={data}
-          onOpen={openDialog}
+          onOpen={() => {
+            // The chip pulses itself; the dialog opens after a beat so the
+            // animation isn't hidden behind the dim layer.
+            setTimeout(openDialog, 240);
+          }}
           suppressHover={dragging}
         />
         <RefreshLimitsButton
           rpc={rpc}
           providerId={primary.providerId}
           label={primary.label}
+          onRefreshed={() => void reload(false)}
         />
       </div>
       )}
