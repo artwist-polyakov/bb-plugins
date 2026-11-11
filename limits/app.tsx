@@ -970,7 +970,6 @@ function LimitsOverlay() {
     if (dialogOpen) return;
     const rect = containerRef.current?.getBoundingClientRect();
     if (rect === undefined) return;
-    event.currentTarget.setPointerCapture?.(event.pointerId);
     dragRef.current = {
       startX: event.clientX,
       startY: event.clientY,
@@ -988,6 +987,10 @@ function LimitsOverlay() {
     if (!drag.moved) {
       drag.moved = true;
       setDragging(true);
+      // Capture only once a real drag begins — capturing on pointer-down
+      // would retarget the following click to the plate and silently kill
+      // the refresh button and chip clicks.
+      event.currentTarget.setPointerCapture?.(event.pointerId);
     }
     const width = containerRef.current?.offsetWidth ?? 380;
     const w = window.innerWidth;
