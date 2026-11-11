@@ -1023,6 +1023,14 @@ function LimitsOverlay() {
     if (!suppressClick.current) setDialogOpen(true);
   };
   const dotPulse = useClickPulse();
+  // Pulse the whole pill whenever fresh data lands — a visible "it really
+  // refreshed" even when the numbers barely move.
+  const dataPulse = useClickPulse();
+  const dataStamp = data?.fetchedAt ?? null;
+  useEffect(() => {
+    if (dataStamp !== null) dataPulse.pulse();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataStamp]);
 
   const primaryProvider =
     data?.providers.find(
@@ -1077,7 +1085,7 @@ function LimitsOverlay() {
       {minimized ? (
         <div className={`group/chip pointer-events-auto relative flex cursor-pointer touch-none select-none items-center rounded-full border border-border/60 bg-background/75 p-1.5 shadow-sm backdrop-blur-md [-webkit-app-region:no-drag] ${
           dragging ? "scale-110 cursor-grabbing shadow-lg" : ""
-        } ${dotPulse.pulsing ? "limits-ring-pulse" : ""}`}
+        } ${dotPulse.pulsing || dataPulse.pulsing ? "limits-ring-pulse" : ""}`}
           role="img"
           onPointerDown={onDragStart}
           onPointerMove={onDragMove}
