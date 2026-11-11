@@ -396,6 +396,25 @@ function HoverCard({ provider }: { provider: Provider }) {
   );
 }
 
+/** One-shot click feedback: rings pulse and a radar ping expands. */
+function useClickPulse() {
+  const [pulsing, setPulsing] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pulse = () => {
+    setPulsing(false);
+    requestAnimationFrame(() => setPulsing(true));
+    if (timer.current !== null) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setPulsing(false), 450);
+  };
+  useEffect(
+    () => () => {
+      if (timer.current !== null) clearTimeout(timer.current);
+    },
+    [],
+  );
+  return { pulsing, pulse };
+}
+
 /**
  * One header block per provider: a large brand mark, one small ring per
  * limit window showing the remaining share (a full ring = everything left,
@@ -422,6 +441,7 @@ function ProviderChip({
   suppressHover?: boolean;
 }) {
   const { values } = useSettings();
+  const { pulsing, pulse } = useClickPulse();
 
   if ((values?.[setting] ?? settingDefault) === false) return null;
 
@@ -457,7 +477,10 @@ function ProviderChip({
               )
               .join(" · ")}. Click for details & refresh`
       }
-      onClick={onOpen}
+      onClick={() => {
+        pulse();
+        onOpen();
+      }}
       onContextMenu={(event) => {
         event.preventDefault();
         onOpen();
@@ -472,7 +495,12 @@ function ProviderChip({
             : "shrink-0 text-foreground"
         }
       />
-      <span className="flex items-center gap-1">
+      <span
+        className={`relative flex items-center gap-1 ${
+          pulsing ? "limits-ring-pulse" : ""
+        }`}
+      >
+        {pulsing ? <span className="limits-ping" aria-hidden="true" /> : null}
         {windows.length > 0
           ? windows.map((window) => (
               <ProgressRing
@@ -991,6 +1019,7 @@ function LimitsOverlay() {
   const openDialog = () => {
     if (!suppressClick.current) setDialogOpen(true);
   };
+  const dotPulse = useClickPulse();
 
   const primaryProvider =
     data?.providers.find(
@@ -1021,10 +1050,31 @@ function LimitsOverlay() {
             : { left: `${pos.left}px`, top: `${pos.top}px` }
       }
     >
+      {/* Click-feedback animations (inline: the built CSS has no keyframes slot). */}
+      <style>{`
+@keyframes limits-ring-pulse-kf {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.18); filter: drop-shadow(0 0 6px currentColor); }
+  100% { transform: scale(1); }
+}
+@keyframes limits-ping-kf {
+  from { transform: scale(0.6); opacity: 0.55; }
+  to { transform: scale(2.1); opacity: 0; }
+}
+.limits-ring-pulse { animation: limits-ring-pulse-kf 420ms ease-out; }
+.limits-ping {
+  position: absolute;
+  inset: -4px;
+  border-radius: 9999px;
+  border: 2px solid currentColor;
+  pointer-events: none;
+  animation: limits-ping-kf 420ms ease-out forwards;
+}
+      `}</style>
       {minimized ? (
-        <div className={`group/chip pointer-events-auto flex cursor-pointer touch-none select-none items-center rounded-full border border-border/60 bg-background/75 p-1.5 shadow-sm backdrop-blur-md [-webkit-app-region:no-drag] ${
+        <div className={`group/chip pointer-events-auto relative flex cursor-pointer touch-none select-none items-center rounded-full border border-border/60 bg-background/75 p-1.5 shadow-sm backdrop-blur-md [-webkit-app-region:no-drag] ${
           dragging ? "scale-110 cursor-grabbing shadow-lg" : ""
-        }`}
+        } ${dotPulse.pulsing ? "limits-ring-pulse" : ""}`}
           role="img"
           onPointerDown={onDragStart}
           onPointerMove={onDragMove}
@@ -1035,7 +1085,10 @@ function LimitsOverlay() {
               ? "Limits"
               : `${primary.label}: ${primaryHealthy ? `${primaryLeft.toFixed(0)}% left` : statusNote(primaryProvider)}`
           }
-          onClick={openDialog}
+          onClick={() => {
+            dotPulse.pulse();
+            openDialog();
+          }}
         >
           <ProgressRing
             left={primaryHealthy ? primaryLeft : 0}
